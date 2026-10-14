@@ -1,0 +1,777 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flappy Bird Physics Lab</title>
+<style>
+  :root {
+    --bg: #e8edf1; --panel: #ffffff; --ink: #18232e; --muted: #566676;
+    --line: #cfd8e0; --accent: #b84a14; --good: #23724d; --bad: #a8321f;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #101923; --panel: #18242f; --ink: #e7edf2; --muted: #93a6b6;
+      --line: #2a3a48; --accent: #ff9f5a; --good: #6fcf9a; --bad: #ff8a75;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #101923; --panel: #18242f; --ink: #e7edf2; --muted: #93a6b6;
+    --line: #2a3a48; --accent: #ff9f5a; --good: #6fcf9a; --bad: #ff8a75;
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: "Trebuchet MS", "Segoe UI", system-ui, sans-serif;
+    line-height: 1.45;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  h2 { font-size: 1.05rem; margin: 0 0 10px; }
+  p { margin: 0 0 10px; }
+  .lede { color: var(--muted); max-width: 70ch; margin-bottom: 16px; }
+  .layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 700px) {
+    .layout { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+    .stage { position: sticky; top: 12px; }
+  }
+  @media (max-width: 699px) {
+    .stage { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); padding: 6px 0; }
+    .legend { font-size: .7rem; margin-top: 4px; }
+    h1 { font-size: 1.25rem; }
+  }
+  .stack { display: grid; gap: 16px; min-width: 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+
+  canvas#game {
+    width: 100%; max-width: 400px; aspect-ratio: 2 / 3; display: block;
+    border-radius: 10px; cursor: pointer; outline: none; margin: 0 auto;
+    touch-action: manipulation; -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+  }
+  canvas#game:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+  .legend { font-size: .8rem; color: var(--muted); margin: 8px 0 0; text-align: center; }
+  .legend i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 4px; }
+
+  dl.rows { margin: 0; }
+  .row { display: flex; justify-content: space-between; gap: 12px; padding: 5px 0; border-top: 1px solid var(--line); }
+  .row:first-child { border-top: 0; }
+  .row dt { margin: 0; }
+  .row dt small { display: block; color: var(--muted); font-size: .74rem; font-family: "Cambria Math", "Cambria", Georgia, serif; }
+  .row dd { margin: 0; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .row dd span { color: var(--muted); font-size: .8rem; }
+  .row dd b { font-size: 1.02rem; }
+  .cols { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+  @media (min-width: 640px) { .cols { grid-template-columns: 1fr 1fr; } }
+
+  .bar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; background: var(--line); margin: 8px 0 4px; }
+  .bar span { display: block; height: 100%; transition: width .1s linear; }
+  .bar-key { font-size: .76rem; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
+  .bar-key i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; }
+
+  .graphs { display: grid; gap: 8px; grid-template-columns: 1fr 1fr; }
+  .graphs canvas { width: 100%; aspect-ratio: 340 / 110; display: block; border-radius: 4px; }
+
+  .ctl { display: grid; gap: 4px; margin-bottom: 12px; }
+  .ctl label { display: flex; justify-content: space-between; gap: 8px; font-size: .92rem; }
+  .ctl output { font-variant-numeric: tabular-nums; color: var(--accent); font-weight: bold; }
+  input[type=range] { width: 100%; height: 28px; margin: 2px 0; accent-color: var(--accent); }
+  .checks label { padding: 6px 0; }
+  .checks input { width: 20px; height: 20px; vertical-align: middle; }
+  .btns { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+  button {
+    font: inherit; font-size: .88rem; padding: 9px 14px; min-height: 40px; border-radius: 6px; cursor: pointer; touch-action: manipulation;
+    border: 1px solid var(--line); background: transparent; color: var(--ink);
+  }
+  button:hover { border-color: var(--accent); }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .checks { display: flex; gap: 16px; flex-wrap: wrap; font-size: .9rem; }
+
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 5px 6px; border-top: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { border-top: 0; color: var(--muted); font-weight: normal; font-size: .78rem; }
+  td.eq { color: var(--muted); font-family: "Cambria Math", "Cambria", Georgia, serif; text-align: left; font-size: .8rem; }
+  .ok { color: var(--good); font-weight: bold; }
+
+  .eqs { font-family: "Cambria Math", "Cambria", Georgia, serif; font-size: .92rem; margin: 0; padding-left: 18px; }
+  .eqs li { margin-bottom: 4px; }
+  .eqs span { color: var(--muted); font-family: "Trebuchet MS", system-ui, sans-serif; font-size: .78rem; }
+  .note { color: var(--muted); font-size: .82rem; }
+  ol.try { margin: 0; padding-left: 20px; }
+  ol.try li { margin-bottom: 6px; }
+  .vgrid { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); margin-bottom: 8px; }
+  @media (min-width: 640px) { .vgrid { grid-template-columns: 1fr 1fr; align-items: start; } }
+  fieldset.grp { border: 1px solid var(--line); border-radius: 6px; margin: 0; padding: 8px 12px 4px; min-width: 0; }
+  fieldset.grp legend { padding: 0 6px; font-weight: bold; font-size: .9rem; }
+  .var { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; margin-bottom: 10px; }
+  .var label { font-size: .92rem; }
+  .var label i { color: var(--muted); font-family: "Cambria Math", "Cambria", Georgia, serif; }
+  .var .num { display: flex; align-items: center; gap: 4px; }
+  .var .num input {
+    width: 5.8em; font: inherit; font-size: 16px; padding: 5px 6px; text-align: right;
+    border: 1px solid var(--line); border-radius: 5px; background: transparent; color: var(--ink);
+    font-variant-numeric: tabular-nums;
+  }
+  .var .num input.bad { border-color: var(--bad); box-shadow: 0 0 0 1px var(--bad); }
+  .var .num span { color: var(--muted); font-size: .76rem; min-width: 3.4em; }
+  .var input[type=range] { grid-column: 1 / -1; }
+  .var small { grid-column: 1 / -1; color: var(--muted); font-size: .74rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Flappy Bird Physics Lab</h1>
+  <p class="lede">Play the game, then read what the physics is doing. Every number is computed from the equations listed below, in SI units. Up and nose-up are positive in all readouts. Every variable can be changed with a slider or by typing an exact value.</p>
+
+  <div class="layout">
+    <!-- LEFT: game -->
+    <div class="stage">
+      <canvas id="game" width="400" height="600" tabindex="0" aria-label="Flappy bird game. Press space or tap to flap."></canvas>
+      <p class="legend">
+        <i style="background:#2fd07a"></i>velocity <b>v</b> &nbsp;
+        <i style="background:#ff5a4a"></i>weight <b>W = mg</b> &nbsp;
+        Space, click or tap to flap
+      </p>
+    </div>
+
+    <!-- RIGHT: lab -->
+    <div class="stack">
+
+      <section class="card" aria-labelledby="hCtl">
+        <h2 id="hCtl">Change the variables</h2>
+        <p class="note">Drag a slider or type an exact value. Changes apply straight away, even mid-flight. After typing, press Enter or tap outside the box to return to the game.</p>
+        <div class="btns">
+          <button type="button" id="bPause" aria-pressed="false">Pause (P)</button>
+          <button type="button" id="bRestart">Restart round</button>
+          <button type="button" id="bReset">Reset all values</button>
+        </div>
+        <div class="btns" id="presets" role="group" aria-label="Gravity presets">
+          <span class="note" style="align-self:center">Gravity presets:</span>
+          <button type="button" data-g="1.62">Moon 1.62</button>
+          <button type="button" data-g="3.71">Mars 3.71</button>
+          <button type="button" data-g="9.81">Earth 9.81</button>
+          <button type="button" data-g="24.79">Jupiter 24.79</button>
+        </div>
+        <p id="varMsg" class="note" role="status" aria-live="polite" style="min-height:1.2em"></p>
+        <div class="vgrid" id="varGroups"></div>
+        <div class="checks">
+          <label><input type="checkbox" id="cVec" checked> Show vectors</label>
+          <label><input type="checkbox" id="cTrail" checked> Show path</label>
+        </div>
+        <p class="note" style="margin-top:10px">Derived: moment of inertia I = ½mr² = <b id="iVal"></b> kg·m². Scale: 150 px = 1 m.</p>
+      </section>
+
+      <section class="card" aria-labelledby="hMeasure">
+        <h2 id="hMeasure">Live measurements</h2>
+        <div class="cols">
+          <div>
+            <h2>Linear motion</h2>
+            <dl class="rows" id="rowsLinear"></dl>
+          </div>
+          <div>
+            <h2>Rotational motion</h2>
+            <dl class="rows" id="rowsRot"></dl>
+          </div>
+          <div>
+            <h2>Forces and momentum</h2>
+            <dl class="rows" id="rowsForce"></dl>
+          </div>
+          <div>
+            <h2>Mechanical energy</h2>
+            <dl class="rows" id="rowsEnergy"></dl>
+            <div class="bar" id="eBar" role="img" aria-label="Share of energy: translational kinetic, rotational kinetic, potential">
+              <span style="background:#2fd07a;width:0%"></span>
+              <span style="background:#e7c13a;width:0%"></span>
+              <span style="background:#5aa0ff;width:100%"></span>
+            </div>
+            <div class="bar-key">
+              <span><i style="background:#2fd07a"></i>KE trans.</span>
+              <span><i style="background:#e7c13a"></i>KE rot.</span>
+              <span><i style="background:#5aa0ff"></i>PE</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="hGraph">
+        <h2 id="hGraph">Motion graphs, last 4 s</h2>
+        <div class="graphs">
+          <canvas id="gH" aria-label="Graph of height against time"></canvas>
+          <canvas id="gV" aria-label="Graph of vertical velocity against time"></canvas>
+          <canvas id="gT" aria-label="Graph of pitch angle against time"></canvas>
+          <canvas id="gW" aria-label="Graph of angular velocity against time"></canvas>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="hCheck">
+        <h2 id="hCheck">Does the equation match the game?</h2>
+        <p class="note">Each flap launches the bird upward at v₀. Kinematics predicts how high and how long it rises; the game measures it from the simulation.</p>
+        <table>
+          <thead><tr><th></th><th>Equation</th><th>Predicted</th><th>Measured</th><th>Error</th></tr></thead>
+          <tbody>
+            <tr><td>Rise height</td><td class="eq">Δh = v₀² / 2g</td><td id="pH">–</td><td id="mH">–</td><td id="eH">–</td></tr>
+            <tr><td>Time to apex</td><td class="eq">t = v₀ / g</td><td id="pT">–</td><td id="mT">–</td><td id="eT">–</td></tr>
+          </tbody>
+        </table>
+        <p class="note" style="margin-top:8px">Flap once with a clear path and the measured row fills in. Change g or v₀ below and flap again.</p>
+      </section>
+
+      <section class="card" aria-labelledby="hReal">
+        <h2 id="hReal">Real-life application: pitch control of aircraft and drones</h2>
+        <p>A flying vehicle has to do two things at once: move its centre of mass (linear motion) and keep its nose pointed where it is going (rotational motion). The game models both.</p>
+        <p><b>Linear part.</b> Between flaps the bird is in free fall with a = −g. The flap is an impulse, J = mΔv, much like a drone's propellers or a bird's downstroke giving a short burst of lift. A lunar lander uses the same equations with the Moon's g = 1.62 m/s². Try the Moon preset and watch the rise height grow by 6×.</p>
+        <p><b>Rotational part.</b> An aircraft's nose tends to align with its flight path, γ = tan⁻¹(v<sub>y</sub>/vₓ). An autopilot does this by applying a pitching torque τ = κ(θ<sub>target</sub> − θ) − cω, which is a spring (κ) plus a damper (c) acting on the moment of inertia I. This is a proportional-derivative (PD) controller. The game uses the same law.</p>
+        <p><b>Tuning matters.</b> From your current sliders:</p>
+        <dl class="rows" id="rowsTune"></dl>
+        <p class="note" style="margin-top:8px">Engineers usually aim for ζ ≈ 0.7: quick response with little overshoot. Set damping low and the bird wobbles like an aircraft's short-period pitch oscillation. Set it high and the nose reacts sluggishly. This is a simplified model: there is no aerodynamic lift or drag apart from an adjustable terminal fall speed (4.8 m/s by default), and the "spring" stands in for a control system rather than a physical spring.</p>
+      </section>
+
+      <section class="card" aria-labelledby="hEq">
+        <h2 id="hEq">Equations used</h2>
+        <ol class="eqs">
+          <li>v = v₀ + at, &nbsp;Δy = v₀t + ½at² <span>constant-acceleration kinematics (m, m/s, s). Free fall: a = g = 9.81 m/s².</span></li>
+          <li>x = vₓt <span>uniform motion; distance in m. Here x = ∫vₓ dt because vₓ rises slowly with score.</span></li>
+          <li>J = mΔv = Δp <span>impulse–momentum, N·s</span></li>
+          <li>W = mg <span>weight, N (kg·m/s²)</span></li>
+          <li>τ = Iα, &nbsp;I = ½mr² <span>rotational dynamics; τ in N·m, I in kg·m², α in rad/s²</span></li>
+          <li>ω = dθ/dt, &nbsp;θ = ∫ω dt <span>rotational kinematics, rad/s and rad</span></li>
+          <li>τ = κ(θ<sub>t</sub> − θ) − cω <span>spring–damper torque; κ in N·m/rad, c in N·m·s/rad</span></li>
+          <li>ωₙ = √(κ/I), &nbsp;ζ = c / (2√(κI)) <span>natural frequency (rad/s) and damping ratio</span></li>
+          <li>KE = ½mv² + ½Iω², &nbsp;PE = mgh <span>energy in J (shown as mJ)</span></li>
+        </ol>
+      </section>
+
+      <section class="card" aria-labelledby="hTry">
+        <h2 id="hTry">Try this</h2>
+        <ol class="try">
+          <li>Press <b>Earth</b>, flap once, and compare predicted and measured rise height.</li>
+          <li>Press <b>Moon</b> and flap again. Does the error stay small?</li>
+          <li>Drop damping c to 0.2 mN·m·s/rad and watch θ(t) ring after each flap. Then raise it to 6 and compare.</li>
+          <li>Crash into a pipe and read ω(t): the bird now spins freely, so its rotational kinetic energy ½Iω² decays only through friction.</li>
+          <li>Press <b>P</b> to pause, then set m = 0.3 kg and r = 0.12 m. I = ½mr² grows, so the same torque now gives a smaller α and the nose reacts more slowly.</li>
+        </ol>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+
+  /* ================= SI constants ================= */
+  const S = 150;                         // pixels per metre (visual scale only)
+  const Wm = 400 / S, Hm = 600 / S;      // world size in m
+  const Gm = 70 / S;                     // ground thickness in m
+  const floorY = Hm - Gm;                // y of ground surface, metres from top
+  const BIRD_X = 110 / S;                // m
+  const PIPE_W = 56 / S;                 // m
+  const VX_MAX_ADD = 0.47;               // m/s cap on the score-based speed-up
+  const MAX_UP = -0.5, MAX_DOWN = 1.4;   // rad (angle is positive nose-DOWN internally)
+  const DT = 1 / 120;                    // s, fixed physics step
+
+  // Every adjustable variable. `def`, `min`, `max` are in display units; `si` converts display units to SI.
+  const VARS = [
+    { k: 'g', name: 'Gravity', sym: 'g', unit: 'm/s²', min: 1, max: 26, step: 0.01, def: 9.81, dec: 2, si: 1, group: 'Linear motion' },
+    { k: 'v0', name: 'Flap launch speed', sym: 'v₀', unit: 'm/s', min: 1.5, max: 6, step: 0.05, def: 2.9, dec: 2, si: 1, group: 'Linear motion' },
+    { k: 'vx0', name: 'Forward speed', sym: 'vₓ', unit: 'm/s', min: 0.3, max: 3, step: 0.05, def: 1, dec: 2, si: 1, group: 'Linear motion' },
+    { k: 'vgain', name: 'Speed gain per point', sym: 'Δvₓ', unit: 'm/s', min: 0, max: 0.1, step: 0.001, def: 0.027, dec: 3, si: 1, group: 'Linear motion', hint: 'Forward speed rises by this much for each pipe passed (capped at +0.47 m/s).' },
+    { k: 'vterm', name: 'Terminal fall speed', sym: 'v_t', unit: 'm/s', min: 2, max: 12, step: 0.1, def: 4.8, dec: 1, si: 1, group: 'Linear motion' },
+    { k: 'm', name: 'Mass', sym: 'm', unit: 'kg', min: 0.01, max: 0.5, step: 0.005, def: 0.05, dec: 3, si: 1, group: 'Bird body', hint: 'Does not change how fast it falls. It changes weight, flap impulse, energy and inertia.' },
+    { k: 'r', name: 'Radius', sym: 'r', unit: 'm', min: 0.04, max: 0.15, step: 0.005, def: 0.085, dec: 3, si: 1, group: 'Bird body', hint: 'Sets collision size and moment of inertia I = ½mr².' },
+    { k: 'kappa', name: 'Pitch stiffness', sym: 'κ', unit: 'mN·m/rad', min: 0.5, max: 60, step: 0.5, def: 13, dec: 1, si: 1e-3, group: 'Rotation' },
+    { k: 'c', name: 'Pitch damping', sym: 'c', unit: 'mN·m·s/rad', min: 0.05, max: 10, step: 0.05, def: 2.1, dec: 2, si: 1e-3, group: 'Rotation' },
+    { k: 'spin', name: 'Flap angular kick', sym: 'ω_f', unit: 'rad/s', min: 0, max: 10, step: 0.1, def: 4.5, dec: 1, si: 1, group: 'Rotation' },
+    { k: 'gap', name: 'Pipe gap', sym: 'gap', unit: 'm', min: 0.5, max: 2, step: 0.05, def: 1, dec: 2, si: 1, group: 'Course' },
+    { k: 'spacing', name: 'Pipe spacing', sym: 'd', unit: 'm', min: 1, max: 3, step: 0.05, def: 1.4, dec: 2, si: 1, group: 'Course' },
+    { k: 'ts', name: 'Simulation speed', sym: '×', unit: '×', min: 0.1, max: 1.5, step: 0.05, def: 1, dec: 2, si: 1, group: 'Simulation', hint: 'Slow it down to watch the numbers. The physics results do not change.' }
+  ];
+  const P = {};                          // current values in SI units
+  VARS.forEach(v => { P[v.k] = v.def * v.si; });
+  // Derived values, refreshed by syncDerived() whenever a variable changes
+  let R, MASS, I, GAP, PIPE_SPACING, VX0, V_TERM, FLAP_SPIN, VX_PER_POINT;
+  let timeScale = 1, paused = false;
+
+  /* ================= State ================= */
+  const canvas = $('game'), ctx = canvas.getContext('2d');
+  const dpr = Math.min(window.devicePixelRatio || 1, 3);
+  canvas.width = 400 * dpr; canvas.height = 600 * dpr; ctx.scale(dpr, dpr);
+
+  let state = 'ready';
+  let bird, pipes, score, best = 0, dist, simT, time = 0, wingPhase = 0, flash = 0, deadTimer = 0;
+  let groundX = 0, lastJ = 0, alphaMeas = 0, track = null, trail = [], trailClock = 0;
+  const WIN = 4; let samples = [];
+  try { best = +localStorage.getItem('flappy-lab-best') || 0; } catch (e) {}
+
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const curVx = () => VX0 + Math.min(score * VX_PER_POINT, VX_MAX_ADD);
+
+  function addPipe(x) {
+    const min = 90 / S, max = Hm - Gm - GAP - 90 / S;
+    pipes.push({ x, gapY: min + Math.random() * (max - min), passed: false });
+  }
+  function reset() {
+    bird = { y: Hm / 2 - 30 / S, vy: 0, angle: 0, omega: 0 };   // vy is positive DOWN (screen)
+    pipes = []; score = 0; dist = 0; simT = 0; flash = 0; deadTimer = 0;
+    lastJ = 0; alphaMeas = 0; track = null; trail = []; samples = [];
+    for (let i = 0; i < 3; i++) addPipe((400 + 120) / S + i * PIPE_SPACING);
+  }
+
+  function flap() {
+    if (paused) return;
+    if (state === 'ready') state = 'play';
+    if (state === 'play') {
+      const dv = P.v0 + bird.vy;          // change in upward velocity (vy is down-positive)
+      lastJ = MASS * dv;                  // impulse J = m Δv
+      bird.vy = -P.v0;                    // launch upward at v0
+      bird.omega = -FLAP_SPIN;            // nose-up angular kick
+      wingPhase = 1;
+      track = { y0: bird.y, minY: bird.y, t0: simT, valid: true };
+    } else if (state === 'dead' && deadTimer > 0.7) {
+      reset(); state = 'ready'; clearMeasured();
+    }
+  }
+
+  /* ================= Physics step ================= */
+  function freeFall(dt) {
+    // exact constant-acceleration update: y = y0 + v t + ½ a t², v = v0 + a t
+    const vNew = bird.vy + P.g * dt;
+    if (vNew > V_TERM) { bird.y += V_TERM * dt; bird.vy = V_TERM; }
+    else { bird.y += bird.vy * dt + 0.5 * P.g * dt * dt; bird.vy = vNew; }
+  }
+
+  function step(dt) {
+    time += dt;
+    wingPhase = Math.max(0, wingPhase - dt * 4);
+
+    if (state === 'ready') {
+      bird.y = Hm / 2 - 30 / S + Math.sin(time * 4) * 8 / S;
+      bird.angle = Math.sin(time * 4 + 1) * 0.12;
+      groundX = (groundX + VX0 * S * dt) % 24;
+      return;
+    }
+
+    if (state === 'play') {
+      simT += dt;
+      const vx = curVx();
+      dist += vx * dt;
+      groundX = (groundX + vx * S * dt) % 24;
+
+      // ---- linear motion ----
+      const vyPrev = bird.vy;
+      freeFall(dt);
+      if (track) {
+        track.minY = Math.min(track.minY, bird.y);
+        if (vyPrev < 0 && bird.vy >= 0) {         // apex reached
+          if (track.valid) {
+            const f = -vyPrev / (bird.vy - vyPrev);
+            recordMeasured(track.y0 - track.minY, (simT - dt + f * dt) - track.t0);
+          }
+          track = null;
+        }
+      }
+
+      // ---- rotational motion ----
+      const target = clamp(Math.atan2(bird.vy, vx * 1.4), MAX_UP, MAX_DOWN);
+      const stiff = Math.max(Math.sqrt(P.kappa / I), P.c / I);             // fastest rate in the pitch system, 1/s
+      const n = Math.min(200, Math.max(1, Math.ceil(dt * stiff / 0.4)));   // sub-steps keep it stable for any inputs
+      const hs = dt / n;
+      let alpha = 0;
+      for (let i = 0; i < n; i++) {
+        const tau = P.kappa * (target - bird.angle) - P.c * bird.omega;    // N·m
+        alpha = tau / I;                                                   // rad/s²
+        bird.omega += alpha * hs;
+        bird.angle += bird.omega * hs;
+      }
+      alphaMeas = alpha;
+
+      // ---- pipes ----
+      for (const p of pipes) {
+        p.x -= vx * dt;
+        if (!p.passed && p.x + PIPE_W < BIRD_X - R) { p.passed = true; score++; }
+      }
+      if (pipes[0].x + PIPE_W < -10 / S) { pipes.shift(); addPipe(pipes[pipes.length - 1].x + PIPE_SPACING); }
+
+      // trail
+      trailClock += dt;
+      if (trailClock > 0.06) { trailClock = 0; trail.push({ d: dist, y: bird.y }); }
+
+      // collisions
+      const lowest = floorY - R;
+      if (bird.y > lowest) { bird.y = lowest; die(); }
+      if (bird.y < -2 * R) { bird.y = -2 * R; bird.vy = 0; if (track) track.valid = false; }
+      for (const p of pipes) {
+        if (BIRD_X + R > p.x && BIRD_X - R < p.x + PIPE_W) {
+          if (bird.y - R < p.gapY || bird.y + R > p.gapY + GAP) die();
+        }
+      }
+    } else if (state === 'dead') {
+      deadTimer += dt; flash = Math.max(0, flash - dt * 3);
+      const lowest = floorY - R, wOld = bird.omega;
+      if (bird.y < lowest) {
+        freeFall(dt);
+        if (bird.y > lowest) bird.y = lowest;
+        bird.omega *= (1 - 0.4 * dt);
+      } else {
+        bird.vy = 0;
+        bird.omega *= (1 - 6 * dt);
+      }
+      bird.angle += bird.omega * dt;
+      alphaMeas = (bird.omega - wOld) / dt;
+    }
+  }
+
+  function die() {
+    if (state !== 'play') return;
+    state = 'dead'; flash = 1; deadTimer = 0; track = null;
+    bird.vy = Math.max(bird.vy, -0.8);   // small bounce (m/s)
+    bird.omega = 9;                      // spin on impact (rad/s)
+    if (score > best) { best = score; try { localStorage.setItem('flappy-lab-best', String(best)); } catch (e) {} }
+  }
+
+  /* ================= Drawing the game ================= */
+  function drawSky() {
+    const g = ctx.createLinearGradient(0, 0, 0, 600);
+    g.addColorStop(0, '#2f4f6f'); g.addColorStop(0.55, '#e0876a'); g.addColorStop(1, '#f7c58b');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 400, 600);
+    ctx.fillStyle = 'rgba(255,236,200,.85)';
+    ctx.beginPath(); ctx.arc(300, 600 - 70 - 120, 38, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(60,50,80,.55)';
+    ctx.beginPath(); ctx.moveTo(0, 530);
+    const off = (dist * S * 0.2) % 300;
+    for (let x = 0; x <= 410; x += 10) ctx.lineTo(x, 530 - 40 - Math.sin((x + off) / 48) * 18 - Math.sin((x + off) / 17) * 5);
+    ctx.lineTo(400, 530); ctx.fill();
+  }
+  function drawPipe(p) {
+    const x = p.x * S, w = PIPE_W * S, gy = p.gapY * S, gp = GAP * S;
+    const body = '#3d7a5c', edge = '#2a5a42', lip = '#4f9873';
+    const part = (y, h, capY) => {
+      ctx.fillStyle = body; ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = edge; ctx.fillRect(x + w - 9, y, 9, h);
+      ctx.fillStyle = lip; ctx.fillRect(x - 4, capY, w + 8, 22);
+      ctx.fillStyle = edge; ctx.fillRect(x + w - 5, capY, 9, 22);
+    };
+    part(0, gy, gy - 22);
+    part(gy + gp, 600, gy + gp);
+  }
+  function drawGround() {
+    const y = 600 - 70;
+    ctx.fillStyle = '#6b4a3a'; ctx.fillRect(0, y, 400, 70);
+    ctx.fillStyle = '#7fae5a'; ctx.fillRect(0, y, 400, 14);
+    ctx.fillStyle = '#5c8b44';
+    for (let x = -24; x < 424; x += 24) {
+      ctx.beginPath(); ctx.moveTo(x - groundX, y + 14); ctx.lineTo(x - groundX + 12, y + 14); ctx.lineTo(x - groundX + 6, y + 4); ctx.fill();
+    }
+  }
+  function drawTrail() {
+    if (!$('cTrail').checked) return;
+    ctx.fillStyle = 'rgba(255,255,255,.65)';
+    for (const pt of trail) {
+      const x = (BIRD_X - (dist - pt.d)) * S;
+      if (x < -5) continue;
+      ctx.beginPath(); ctx.arc(x, pt.y * S, 2, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  function arrow(x0, y0, dx, dy, color) {
+    let len = Math.hypot(dx, dy); if (len < 3) return;
+    if (len > 140) { dx *= 140 / len; dy *= 140 / len; len = 140; }
+    const x1 = x0 + dx, y1 = y0 + dy, a = Math.atan2(dy, dx);
+    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x1, y1);
+    ctx.lineTo(x1 - 9 * Math.cos(a - 0.4), y1 - 9 * Math.sin(a - 0.4));
+    ctx.lineTo(x1 - 9 * Math.cos(a + 0.4), y1 - 9 * Math.sin(a + 0.4)); ctx.fill();
+  }
+  function drawVectors() {
+    if (!$('cVec').checked || state === 'ready') return;
+    const bx = BIRD_X * S, by = bird.y * S;
+    const vx = state === 'play' ? curVx() : 0;
+    arrow(bx, by, vx * 22, bird.vy * 22, '#2fd07a');                     // velocity, 22 px per m/s
+    arrow(bx, by, 0, MASS * P.g * 60, '#ff5a4a');                        // weight, 60 px per N
+  }
+  function drawBird() {
+    const r = 13, sc = R * S / 13;      // drawn at a fixed size, then scaled to the chosen radius
+    ctx.save(); ctx.translate(BIRD_X * S, bird.y * S); ctx.rotate(bird.angle); ctx.scale(sc, sc);
+    ctx.fillStyle = '#ffd24a'; ctx.beginPath(); ctx.ellipse(0, 0, r + 4, r + 1, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#f2a93b'; ctx.beginPath(); ctx.ellipse(-2, 6, r, 5, 0, 0, Math.PI); ctx.fill();
+    ctx.fillStyle = '#ff7a3d'; ctx.beginPath(); ctx.moveTo(r + 2, -1); ctx.lineTo(r + 11, 3); ctx.lineTo(r + 2, 7); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(7, -5, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#1c2b3a'; ctx.beginPath(); ctx.arc(8.5, -5, 2.4, 0, Math.PI * 2); ctx.fill();
+    const flutter = state === 'dead' ? 0.5 : Math.sin(time * 28) * 0.15 * wingPhase - 0.9 * wingPhase;
+    ctx.save(); ctx.translate(-4, 1); ctx.rotate(flutter);
+    ctx.fillStyle = '#f2a93b'; ctx.beginPath(); ctx.ellipse(-6, 0, 10, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore(); ctx.restore();
+  }
+  function text(txt, x, y, size, color = '#fff') {
+    ctx.font = `bold ${size}px "Trebuchet MS", "Segoe UI", system-ui, sans-serif`;
+    ctx.textAlign = 'center'; ctx.lineWidth = size / 6; ctx.strokeStyle = 'rgba(28,43,58,.8)';
+    ctx.strokeText(txt, x, y); ctx.fillStyle = color; ctx.fillText(txt, x, y);
+  }
+  function draw() {
+    drawSky(); pipes.forEach(drawPipe); drawGround(); drawTrail(); drawBird(); drawVectors();
+    if (state !== 'ready') text(String(score), 200, 80, 52);
+    if (state === 'ready') { text('Flap to start', 200, 190, 34); text('Space · click · tap', 200, 224, 16, '#f4e9d8'); }
+    if (state === 'dead') {
+      if (flash > 0) { ctx.fillStyle = `rgba(255,255,255,${flash * 0.7})`; ctx.fillRect(0, 0, 400, 600); }
+      ctx.fillStyle = 'rgba(28,43,58,.72)'; ctx.fillRect(80, 190, 240, 140);
+      text('Crashed', 200, 232, 32, '#ffb27a'); text(`Score ${score}`, 200, 272, 22); text(`Best ${best}`, 200, 302, 18, '#f4e9d8');
+      if (deadTimer > 0.7) text('Flap to retry', 200, 380, 20);
+    }
+  }
+
+  /* ================= Readout panels ================= */
+  const rows = {
+    rowsLinear: [
+      ['h', 'Height above ground', 'h = y_ground − y', 'm'],
+      ['vy', 'Vertical velocity', 'v = v₀ + at', 'm/s'],
+      ['ay', 'Vertical acceleration', 'a = −g in free fall', 'm/s²'],
+      ['vx', 'Horizontal speed', 'vₓ', 'm/s'],
+      ['x', 'Distance travelled', 'x = ∫vₓ dt', 'm'],
+      ['t', 'Flight time', 't', 's'],
+      ['dx', 'Distance to next pipe', 'Δx', 'm'],
+      ['tp', 'Time to reach it', 't = Δx / vₓ', 's'],
+      ['dh', 'Height of gap centre above bird', 'Δh', 'm']
+    ],
+    rowsRot: [
+      ['th', 'Pitch angle', 'θ = ∫ω dt', ''],
+      ['w', 'Angular velocity', 'ω = dθ/dt', 'rad/s'],
+      ['al', 'Angular acceleration', 'α = τ / I', 'rad/s²'],
+      ['tau', 'Net torque', 'τ = Iα', 'mN·m']
+    ],
+    rowsForce: [
+      ['W', 'Weight', 'W = mg', 'N'],
+      ['J', 'Impulse of last flap', 'J = mΔv', 'N·s'],
+      ['gam', 'Flight-path angle', 'γ = tan⁻¹(v_y / vₓ)', '°']
+    ],
+    rowsEnergy: [
+      ['KEt', 'Translational kinetic energy', '½mv²', 'mJ'],
+      ['KEr', 'Rotational kinetic energy', '½Iω²', 'mJ'],
+      ['PE', 'Gravitational potential energy', 'mgh', 'mJ'],
+      ['E', 'Total mechanical energy', 'KE + PE', 'mJ']
+    ],
+    rowsTune: [
+      ['wn', 'Natural frequency', 'ωₙ = √(κ/I)', 'rad/s'],
+      ['zeta', 'Damping ratio', 'ζ = c / (2√(κI))', ''],
+      ['Td', 'Pitch oscillation period', 'T = 2π / (ωₙ√(1−ζ²))', 's'],
+      ['beh', 'Behaviour', '', '']
+    ]
+  };
+  Object.entries(rows).forEach(([cid, list]) => {
+    const el = $(cid);
+    list.forEach(([id, name, eq, unit]) => {
+      const d = document.createElement('div'); d.className = 'row';
+      d.innerHTML = `<dt>${name}${eq ? `<small>${eq}</small>` : ''}</dt><dd><b id="v_${id}">–</b> <span>${unit}</span></dd>`;
+      el.appendChild(d);
+    });
+  });
+  const set = (id, s) => { $('v_' + id).textContent = s; };
+
+  function updateReadout() {
+    const playing = state === 'play';
+    const h = floorY - bird.y, vUp = -bird.vy;
+    const vx = playing ? curVx() : 0;
+    const airborne = h > R + 1e-3;
+    const aUp = (playing || (state === 'dead' && airborne)) && bird.vy < V_TERM - 1e-6 ? -P.g : 0;
+    set('h', h.toFixed(3)); set('vy', vUp.toFixed(2)); set('ay', aUp.toFixed(2));
+    set('vx', vx.toFixed(2)); set('x', dist.toFixed(2)); set('t', simT.toFixed(2));
+
+    const nxt = pipes.find(p => p.x + PIPE_W > BIRD_X - R);
+    if (nxt && playing) {
+      const dx = Math.max(0, nxt.x - BIRD_X);
+      set('dx', dx.toFixed(2)); set('tp', (dx / vx).toFixed(2));
+      set('dh', (floorY - (nxt.gapY + GAP / 2) - h).toFixed(2));
+    } else { set('dx', '–'); set('tp', '–'); set('dh', '–'); }
+
+    const thDeg = -bird.angle * 180 / Math.PI;
+    set('th', `${thDeg.toFixed(1)}° = ${(-bird.angle).toFixed(3)} rad`);
+    set('w', (-bird.omega).toFixed(2)); set('al', (-alphaMeas).toFixed(1)); set('tau', (-I * alphaMeas * 1e3).toFixed(3));
+
+    set('W', (MASS * P.g).toFixed(3)); set('J', lastJ.toFixed(3));
+    set('gam', vx > 0 ? (Math.atan2(vUp, vx) * 180 / Math.PI).toFixed(1) : '–');
+
+    const KEt = 0.5 * MASS * (vx * vx + bird.vy * bird.vy) * 1e3;
+    const KEr = 0.5 * I * bird.omega * bird.omega * 1e3;
+    const PE = MASS * P.g * Math.max(h, 0) * 1e3;
+    const E = KEt + KEr + PE;
+    set('KEt', KEt.toFixed(1)); set('KEr', KEr.toFixed(2)); set('PE', PE.toFixed(1)); set('E', E.toFixed(1));
+    const bars = $('eBar').children, tot = Math.max(E, 1e-9);
+    bars[0].style.width = (KEt / tot * 100) + '%'; bars[1].style.width = (KEr / tot * 100) + '%'; bars[2].style.width = (PE / tot * 100) + '%';
+
+    updateTuning(); updatePrediction();
+  }
+
+  function updateTuning() {
+    const wn = Math.sqrt(P.kappa / I), zeta = P.c / (2 * Math.sqrt(P.kappa * I));
+    set('wn', wn.toFixed(2)); set('zeta', zeta.toFixed(2));
+    set('Td', zeta < 1 ? (2 * Math.PI / (wn * Math.sqrt(1 - zeta * zeta))).toFixed(2) : 'no oscillation');
+    set('beh', zeta < 0.5 ? 'Underdamped: wobbly' : zeta < 0.9 ? 'Well damped: quick, small overshoot' : zeta <= 1.1 ? 'Near critical damping' : 'Overdamped: sluggish');
+  }
+
+  /* ================= Predicted vs measured ================= */
+  function updatePrediction() {
+    $('pH').textContent = (P.v0 * P.v0 / (2 * P.g)).toFixed(3) + ' m';
+    $('pT').textContent = (P.v0 / P.g).toFixed(3) + ' s';
+  }
+  function recordMeasured(dh, dt) {
+    const pH = P.v0 * P.v0 / (2 * P.g), pT = P.v0 / P.g;
+    $('mH').textContent = dh.toFixed(3) + ' m'; $('mT').textContent = dt.toFixed(3) + ' s';
+    const eH = (dh - pH) / pH * 100, eT = (dt - pT) / pT * 100;
+    $('eH').innerHTML = `<span class="ok">${eH.toFixed(2)}%</span>`; $('eT').innerHTML = `<span class="ok">${eT.toFixed(2)}%</span>`;
+  }
+  function clearMeasured() { ['mH', 'mT', 'eH', 'eT'].forEach(i => $(i).textContent = '–'); }
+
+  /* ================= Graphs ================= */
+  const graphs = [
+    { id: 'gH', key: 'h', min: 0, max: 4, label: 'h (m)', color: '#5aa0ff' },
+    { id: 'gV', key: 'v', min: -8, max: 8, label: 'v_y (m/s)', color: '#2fd07a' },
+    { id: 'gT', key: 'th', min: -45, max: 90, label: 'θ (°)', color: '#ffb27a' },
+    { id: 'gW', key: 'w', min: -10, max: 10, label: 'ω (rad/s)', color: '#e7c13a' }
+  ];
+  const GW = 340, GH = 110;
+  graphs.forEach(g => {
+    g.cv = $(g.id); g.cv.width = GW * dpr; g.cv.height = GH * dpr;
+    g.cx = g.cv.getContext('2d'); g.cx.scale(dpr, dpr);
+  });
+  function drawGraph(g) {
+    const x = g.cx, padL = 34, padR = 6, padT = 18, padB = 14;
+    x.fillStyle = '#0f1720'; x.fillRect(0, 0, GW, GH);
+    const px = t => padL + (t - (time - WIN)) / WIN * (GW - padL - padR);
+    const py = v => padT + (1 - (v - g.min) / (g.max - g.min)) * (GH - padT - padB);
+    x.font = '10px system-ui, sans-serif'; x.textBaseline = 'middle';
+    for (let i = 0; i <= 4; i++) {
+      const val = g.min + (g.max - g.min) * i / 4, y = py(val);
+      x.strokeStyle = '#243445'; x.lineWidth = 1; x.beginPath(); x.moveTo(padL, y); x.lineTo(GW - padR, y); x.stroke();
+      if (i % 2 === 0) { x.fillStyle = '#7f94a6'; x.textAlign = 'right'; x.fillText(String(Math.round(val * 10) / 10), padL - 4, y); }
+    }
+    if (g.min < 0 && g.max > 0) { x.strokeStyle = '#4b6277'; x.beginPath(); x.moveTo(padL, py(0)); x.lineTo(GW - padR, py(0)); x.stroke(); }
+    x.save(); x.beginPath(); x.rect(padL, padT, GW - padL - padR, GH - padT - padB); x.clip();
+    x.strokeStyle = g.color; x.lineWidth = 1.8; x.beginPath();
+    samples.forEach((s, i) => { const X = px(s.t), Y = py(s[g.key]); i ? x.lineTo(X, Y) : x.moveTo(X, Y); });
+    x.stroke(); x.restore();
+    x.fillStyle = g.color; x.textAlign = 'left'; x.fillText(g.label, padL, 8);
+    const last = samples[samples.length - 1];
+    if (last) { x.textAlign = 'right'; x.fillText(last[g.key].toFixed(2), GW - padR, 8); }
+    x.fillStyle = '#7f94a6'; x.textAlign = 'left'; x.fillText('−4 s', padL, GH - 4); x.textAlign = 'right'; x.fillText('now', GW - padR, GH - 4);
+  }
+
+  /* ================= Controls ================= */
+  function syncDerived() {
+    MASS = P.m; R = P.r; I = 0.5 * MASS * R * R;
+    GAP = P.gap; PIPE_SPACING = P.spacing; VX0 = P.vx0; VX_PER_POINT = P.vgain;
+    V_TERM = P.vterm; FLAP_SPIN = P.spin; timeScale = P.ts;
+    if (pipes) pipes.forEach(p => { p.gapY = Math.max(90 / S, Math.min(p.gapY, floorY - GAP - 90 / S)); });
+    $('iVal').textContent = I.toExponential(2);
+  }
+
+  const msg = $('varMsg');
+  [...new Set(VARS.map(v => v.group))].forEach(group => {
+    const fs = document.createElement('fieldset'); fs.className = 'grp';
+    fs.innerHTML = `<legend>${group}</legend>`;
+    VARS.filter(v => v.group === group).forEach(v => {
+      const d = document.createElement('div'); d.className = 'var';
+      d.innerHTML = `<label for="n_${v.k}">${v.name} <i>${v.sym}</i></label>
+        <span class="num"><input id="n_${v.k}" type="number" inputmode="decimal" min="${v.min}" max="${v.max}" step="${v.step}"><span>${v.unit}</span></span>
+        <input id="s_${v.k}" type="range" min="${v.min}" max="${v.max}" step="${v.step}" aria-label="${v.name} slider">
+        ${v.hint ? `<small>${v.hint}</small>` : ''}`;
+      fs.appendChild(d);
+    });
+    $('varGroups').appendChild(fs);
+  });
+
+  function setVar(v, val) {
+    P[v.k] = val * v.si; syncDerived();
+    $('n_' + v.k).value = val.toFixed(v.dec); $('s_' + v.k).value = val;
+  }
+  VARS.forEach(v => {
+    const n = $('n_' + v.k), s = $('s_' + v.k);
+    s.addEventListener('input', () => {
+      P[v.k] = +s.value * v.si; syncDerived();
+      n.value = (+s.value).toFixed(v.dec); n.classList.remove('bad'); msg.textContent = '';
+    });
+    s.addEventListener('change', () => s.blur());
+    n.addEventListener('input', () => {
+      const x = parseFloat(n.value);
+      const ok = isFinite(x) && x >= v.min && x <= v.max;
+      n.classList.toggle('bad', !ok);
+      if (ok) { P[v.k] = x * v.si; syncDerived(); s.value = x; }
+    });
+    n.addEventListener('change', () => {
+      let x = parseFloat(n.value);
+      if (!isFinite(x)) x = P[v.k] / v.si;
+      const c = clamp(x, v.min, v.max);
+      msg.textContent = c !== x ? `${v.name} limited to ${c} ${v.unit} (allowed range ${v.min} to ${v.max}).` : '';
+      n.classList.remove('bad'); setVar(v, c);
+    });
+    n.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === 'Escape') n.blur(); });
+    setVar(v, v.def);
+  });
+
+  $('presets').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    setVar(VARS.find(v => v.k === 'g'), +b.dataset.g); msg.textContent = ''; b.blur();
+  });
+  function togglePause() {
+    paused = !paused;
+    $('bPause').textContent = paused ? 'Resume (P)' : 'Pause (P)';
+    $('bPause').setAttribute('aria-pressed', String(paused));
+  }
+  $('bPause').addEventListener('click', e => { togglePause(); e.currentTarget.blur(); });
+  $('bRestart').addEventListener('click', e => { reset(); state = 'ready'; clearMeasured(); e.currentTarget.blur(); });
+  $('bReset').addEventListener('click', e => { VARS.forEach(v => setVar(v, v.def)); msg.textContent = 'All variables reset to their default values.'; e.currentTarget.blur(); });
+  window.addEventListener('keydown', e => { if (e.code === 'KeyP' && e.target.tagName !== 'INPUT') togglePause(); });
+  function pausedBanner() {
+    ctx.fillStyle = 'rgba(28,43,58,.55)'; ctx.fillRect(0, 0, 400, 600);
+    text('Paused', 200, 300, 40); text('Press P or Resume', 200, 335, 16, '#f4e9d8');
+  }
+
+  /* ================= Loop and input ================= */
+  let last = performance.now(), acc = 0, readClock = 0;
+  function frame(now) {
+    const el = Math.min((now - last) / 1000, 0.1); last = now; acc += paused ? 0 : el * timeScale;
+    while (acc >= DT) { step(DT); acc -= DT; }
+    if (!paused) samples.push({ t: time, h: floorY - bird.y, v: -bird.vy, th: -bird.angle * 180 / Math.PI, w: -bird.omega });
+    while (samples.length && samples[0].t < time - WIN) samples.shift();
+    draw(); if (paused) pausedBanner(); graphs.forEach(drawGraph);
+    readClock += el; if (readClock > 0.1) { readClock = 0; updateReadout(); }
+    requestAnimationFrame(frame);
+  }
+  window.addEventListener('keydown', e => {
+    if (e.code !== 'Space' && e.code !== 'ArrowUp') return;
+    const t = e.target;
+    if (t.tagName === 'BUTTON' || t.tagName === 'INPUT' || t.tagName === 'SELECT') return;
+    e.preventDefault(); if (!e.repeat) flap();
+  });
+  canvas.addEventListener('pointerdown', e => { e.preventDefault(); flap(); canvas.focus({ preventScroll: true }); });
+
+  /* ================= Fit the canvas to any screen ================= */
+  let fitW = 0, fitH = 0;
+  function fitCanvas(force) {
+    const vw = window.innerWidth, vh = window.innerHeight;
+    if (!force && vw === fitW && Math.abs(vh - fitH) < 100) return;   // ignore small toolbar-driven height changes
+    fitW = vw; fitH = vh;
+    const wide = vw >= 700;
+    const cap = vw < 900 ? 480 : 600;
+    const maxH = wide ? vh - 24 : vh * 0.46;      // narrow screens: game stays pinned above the controls
+    let h = Math.max(150, Math.min(cap, maxH));
+    let w = h * 2 / 3;
+    const availW = vw - 32;
+    if (w > availW) { w = availW; h = w * 1.5; }
+    canvas.style.width = Math.round(w) + 'px'; canvas.style.height = Math.round(h) + 'px';
+  }
+  fitCanvas(true);
+  window.addEventListener('resize', () => fitCanvas(false));
+  window.addEventListener('orientationchange', () => setTimeout(() => fitCanvas(true), 250));
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+  document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play' && !paused) togglePause(); });
+
+  reset(); updateReadout();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
